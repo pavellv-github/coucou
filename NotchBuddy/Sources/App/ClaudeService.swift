@@ -189,6 +189,63 @@ final class ClaudeService {
 
     func clearConversation() {
         conversationMessages = []
+        claudeCodeSession = nil
+    }
+
+    // MARK: - Chat through the local Claude Code CLI (no API key)
+
+    /// Claude Code session the CLI chat continues with --resume.
+    private var claudeCodeSession: String?
+
+    /// No API key saved: ask the `claude` CLI, which signs in with the user's own Claude
+    /// login. Text only (file/window context is not passed), hooks off so the chat
+    /// does not show up as a Claude Code session in the notch.
+    private func chatViaClaudeCode(query: String, state: AppState) async {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        guard let cli = ["\(home)/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
+            .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            await showError("API key missing and Claude Code not found. Open settings.", state: state)
+            return
+        }
+        // The prompt goes through stdin: a query starting with "-" would read as a flag.
+        var args = ["-p", "--output-format", "json", "--tools", "WebSearch,WebFetch",
+                    "--settings", #"{"disableAllHooks":true}"#, "--system-prompt", systemPrompt]
+        if let id = claudeCodeSession { args += ["--resume", id] }
+        state.stateOverride = .thinking
+        let data: Data? = await Task.detached {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: cli)
+            p.arguments = args
+            p.currentDirectoryURL = FileManager.default.temporaryDirectory
+            var env = ProcessInfo.processInfo.environment
+            env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + (env["PATH"] ?? "/usr/bin:/bin")
+            p.environment = env
+            let out = Pipe(), input = Pipe()
+            p.standardOutput = out
+            p.standardInput = input
+            p.standardError = FileHandle.nullDevice
+            guard (try? p.run()) != nil else { return nil }
+            input.fileHandleForWriting.write(Data(query.utf8))
+            try? input.fileHandleForWriting.close()
+            let d = out.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            return d
+        }.value
+        guard let data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let text = json["result"] as? String else {
+            await showError("Claude Code didn't answer. Run `claude` in a terminal to sign in.", state: state)
+            return
+        }
+        if json["is_error"] as? Bool == true {
+            await showError(text, state: state)
+            return
+        }
+        claudeCodeSession = json["session_id"] as? String
+        state.chatHistory.append(ChatMessage(role: .assistant, content: text))
+        state.stateOverride = nil
+        state.view = .prompt
+        NotificationCenter.default.post(name: .triggerEmote, object: BotEmote.happy)
     }
 
     /// Resolved once: NSFullUserName() is a system call, and the name cannot change under us
@@ -229,7 +286,7 @@ final class ClaudeService {
             return
         }
         guard let key = apiKey, !key.isEmpty else {
-            await showError("API key missing. Open settings.", state: state)
+            await chatViaClaudeCode(query: query, state: state)
             return
         }
 

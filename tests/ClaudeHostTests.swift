@@ -20,6 +20,8 @@ enum ClaudeHostTests {
         check("cmux: bundle id wins over TERM_PROGRAM=ghostty",
               ClaudeHost.terminal(termProgram: "ghostty", bundleId: "com.cmuxterm.app")?.name == "cmux")
         check("Orca by bundle id", ClaudeHost.terminal(termProgram: "", bundleId: "com.stablyai.orca")?.name == "Orca")
+        check("WebStorm by bundle id (no TERM_PROGRAM)",
+              ClaudeHost.terminal(termProgram: "", bundleId: "com.jetbrains.WebStorm")?.name == "WebStorm")
         check("VS Code → nil", ClaudeHost.terminal(termProgram: "vscode", bundleId: "com.microsoft.VSCode") == nil)
         check("Cursor → nil", ClaudeHost.terminal(termProgram: "vscode", bundleId: "com.todesktop.230313mzl4w4u92") == nil)
         check("unknown → nil", ClaudeHost.terminal(termProgram: "", bundleId: "com.example.app") == nil)
@@ -30,6 +32,8 @@ enum ClaudeHostTests {
         check("unknown host = VS Code", ClaudeHost.name(for: "com.example.app") == "VS Code")
         check("editor session → VS Code", ClaudeHost.pillName(hostApp: nil) == "VS Code")
         check("terminal session → Claude Code", ClaudeHost.pillName(hostApp: "dev.warp.Warp-Stable") == "Claude Code")
+
+        check("WebStorm session → WebStorm", ClaudeHost.pillName(hostApp: "com.jetbrains.WebStorm") == "WebStorm")
 
         print("ClaudeHost.terminalCardsEnabled")
         UserDefaults.standard.removeObject(forKey: ClaudeHost.terminalCardsKey)

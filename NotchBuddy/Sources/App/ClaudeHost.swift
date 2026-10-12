@@ -30,7 +30,12 @@ struct ClaudeHost: Equatable {
         "dev.zed.Zed":                "Zed",
         "com.cmuxterm.app":           "cmux",    // sets TERM_PROGRAM=ghostty: the bundle id decides
         "com.stablyai.orca":          "Orca",
+        // JetBrains IDEs: their built-in terminal sets no TERM_PROGRAM, only __CFBundleIdentifier.
+        "com.jetbrains.WebStorm":     "WebStorm",
+        "com.jetbrains.WebStorm-EAP": "WebStorm",
     ]
+    /// Hosts that are IDEs, not plain terminals: the pill is named after the IDE.
+    private static let ides: Set<String> = ["com.jetbrains.WebStorm", "com.jetbrains.WebStorm-EAP"]
     private static let termPrograms: [String: String] = [
         "warpterminal":   "dev.warp.Warp-Stable",
         "apple_terminal": "com.apple.Terminal",
@@ -58,9 +63,11 @@ struct ClaudeHost: Equatable {
         return name
     }
 
-    /// Pill label for integration_claude: "VS Code" for editor sessions, "Claude Code" otherwise.
+    /// Pill label for integration_claude: "VS Code" for editor sessions, the IDE's name
+    /// for an IDE terminal (WebStorm), "Claude Code" otherwise.
     static func pillName(hostApp: String?) -> String {
-        hostApp == nil ? "VS Code" : "Claude Code"
+        guard let id = hostApp else { return "VS Code" }
+        return ides.contains(id) ? name(for: id) : "Claude Code"
     }
 
     /// Brings the session's terminal forward (launching it if needed). false when not a terminal host.
